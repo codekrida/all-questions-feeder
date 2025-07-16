@@ -36,6 +36,6 @@ jobs:
                   python3 ./question_generator_v2.py \
                     --api-key "$GEMINI_API_KEY" \
                     --num-questions 100 \
-                    --question-types "['MCQ', 'MOC','TRUE_FALSE','SHORT_ANSWER']" \
+                    --question-types "['MCQ', 'MOC','TRUE_FALSE']" \
                     --difficulty '[1, 2, 3]' \
                     --db-endpoint "https://app.examshala.in/api/create-multiple-questions-in-bank"
