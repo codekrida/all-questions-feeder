@@ -120,7 +120,7 @@ DEFAULT_QUESTION_TYPES = ["MCQ", "MOC"]
 # Default difficulty levels (1: Easy, 2: Medium, 3: Hard)
 DEFAULT_DIFFICULTIES = [1, 2, 3]
 DEFAULT_OUTPUT_FILE = "questions.json"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-pro"
 
 # Environment variables for sensitive configuration
 ENV_VAR_API_KEY = "GEMINI_API_KEY"
@@ -527,6 +527,9 @@ class QuestionGenerator:
             )
             return None
 
+        # Initialize response variable to handle potential UnboundLocalError
+        response = None
+        
         try:
             # Create the prompt for the LLM
             prompt = self._create_prompt(
@@ -594,14 +597,42 @@ class QuestionGenerator:
                     )
                 return None
 
+            # Safely extract response text and parse JSON
+            try:
+                response_text = response.text
+            except ValueError as ve:
+                logger.warning(
+                    f"Cannot access response.text for '{topic}' ({question_type}, difficulty {difficulty}): {ve}"
+                )
+                if (
+                    response
+                    and response.candidates
+                    and response.candidates[0].finish_reason
+                ):
+                    logger.warning(
+                        f"Finish reason: {response.candidates[0].finish_reason}"
+                    )
+                return None
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error accessing response.text for '{topic}' ({question_type}, difficulty {difficulty}): {e}"
+                )
+                return None
+
             # Extract and parse the JSON from the response text
-            question_data = self._extract_json_from_response(response.text)
+            question_data = self._extract_json_from_response(response_text)
 
             # Validate if JSON extraction/parsing was successful
             if not question_data:
                 logger.error(
-                    f"Failed to extract valid JSON from response for '{topic}' ({question_type}, difficulty {difficulty}). Raw text received:\n{response.text}..."
+                    f"Failed to extract valid JSON from response for '{topic}' ({question_type}, difficulty {difficulty})."
                 )
+                # Safely log response text if available
+                try:
+                    if response_text:
+                        logger.error(f"Raw text received:\n{response_text[:1000]}{'...' if len(response_text) > 1000 else ''}")
+                except Exception:
+                    logger.error("Could not log response text due to access error.")
                 return None
 
             logger.debug(
@@ -663,9 +694,14 @@ class QuestionGenerator:
                 f"An unexpected error occurred during question generation for '{topic}' ({question_type}, difficulty {difficulty}): {e}",
                 exc_info=True,  # Log the full traceback
             )
-            # Optionally log the raw response text if available before the error occurred
-            if "response" in locals() and hasattr(response, "text"):  # type: ignore
-                logger.debug(f"Raw response text before error: {response.text[:1000]}{'...' if len(response.text) > 1000 else ''}")  # type: ignore
+            # Safely log raw response text if available
+            if response is not None:
+                try:
+                    if hasattr(response, 'text'):
+                        response_text = response.text
+                        logger.debug(f"Raw response text before error: {response_text[:1000]}{'...' if len(response_text) > 1000 else ''}")
+                except Exception as text_error:
+                    logger.debug(f"Could not access response.text: {text_error}")
             return None
 
 
